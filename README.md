@@ -73,7 +73,9 @@ Errors return `ok: false` and a descriptive message.
 
 ## Foreground Service & Permissions
 
-`app.json` adds the required Android permissions (`INTERNET`, `FOREGROUND_SERVICE`) and declares the notification shown while the foreground service is running. The service badge updates with the latest log entry so you can confirm activity at a glance.
+- Android 13+ requires the runtime `POST_NOTIFICATIONS` permission before a foreground service can show its notification. The app now requests this before starting the relay.
+- The Android manifest declares the background actions service with `foregroundServiceType="dataSync"` and includes `FOREGROUND_SERVICE` (and on Android 14, `FOREGROUND_SERVICE_DATA_SYNC`).
+- If you prebuild again with Expo, re-run `npx expo prebuild -p android` after changing permissions.
 
 ## Tailscale Considerations
 

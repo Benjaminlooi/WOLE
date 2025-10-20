@@ -24,8 +24,8 @@
       "permissions": [
         "INTERNET",
         "FOREGROUND_SERVICE",
-        "INTERNET",
-        "FOREGROUND_SERVICE"
+        "POST_NOTIFICATIONS",
+        "WAKE_LOCK"
       ],
       "foregroundService": {
         "notificationTitle": "WOL Relay Running",

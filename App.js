@@ -11,6 +11,7 @@ import {
   Text,
   TextInput,
   View,
+  PermissionsAndroid,
 } from 'react-native';
 import BackgroundService from 'react-native-background-actions';
 import TcpSocket from 'react-native-tcp-socket';
@@ -332,7 +333,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    BackgroundService.isRunning().then(setIsRunning);
+    setIsRunning(BackgroundService.isRunning());
   }, []);
 
   useEffect(() => {
@@ -340,6 +341,38 @@ export default function App() {
       scrollViewRef.current.scrollTo({ y: 0, animated: true });
     }
   }, [statusLog]);
+
+  const ensureForegroundServiceReady = useCallback(async () => {
+    if (Platform.OS !== 'android') {
+      return true;
+    }
+
+    // Android 13+ requires runtime POST_NOTIFICATIONS for foreground services
+    const sdkInt = Number(Platform.Version);
+    if (!Number.isNaN(sdkInt) && sdkInt >= 33) {
+      try {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
+        );
+        if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+          Alert.alert(
+            'Notifications required',
+            'Grant notification permission to run the foreground service.',
+          );
+          return false;
+        }
+      } catch (e) {
+        // If the request throws, be safe and block start
+        Alert.alert(
+          'Permission error',
+          'Could not request notification permission.',
+        );
+        return false;
+      }
+    }
+
+    return true;
+  }, []);
 
   const startRelay = useCallback(async () => {
     const portNumber = Number(listenPort);
@@ -356,8 +389,13 @@ export default function App() {
       return;
     }
 
-    if (await BackgroundService.isRunning()) {
+    if (BackgroundService.isRunning()) {
       Alert.alert('Already running', 'The WOL relay is already running.');
+      return;
+    }
+
+    const ok = await ensureForegroundServiceReady();
+    if (!ok) {
       return;
     }
 
@@ -369,10 +407,10 @@ export default function App() {
     } catch (error) {
       Alert.alert('Failed to start relay', error.message);
     }
-  }, [listenPort, sharedSecret]);
+  }, [listenPort, sharedSecret, ensureForegroundServiceReady]);
 
   const stopRelay = useCallback(async () => {
-    if (!(await BackgroundService.isRunning())) {
+    if (!BackgroundService.isRunning()) {
       return;
     }
 
