@@ -16,6 +16,7 @@ import {
 import BackgroundService from 'react-native-background-actions';
 import TcpSocket from 'react-native-tcp-socket';
 import dgram from 'react-native-udp';
+import { startWolServer, stopWolServer } from './native/WolServerModule';
 import { NetworkInfo } from 'react-native-network-info';
 import { Buffer } from 'buffer';
 
@@ -332,8 +333,16 @@ export default function App() {
     });
   }, []);
 
+  // Initialize local running state (native service is controlled via JS)
   useEffect(() => {
-    setIsRunning(BackgroundService.isRunning());
+    setIsRunning(false);
+  }, []);
+
+  // Auto-start the native relay on app launch
+  useEffect(() => {
+    // Fire-and-forget; errors are surfaced via alerts inside startRelay
+    startRelay();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -381,15 +390,7 @@ export default function App() {
       return;
     }
 
-    if (!sharedSecret) {
-      Alert.alert(
-        'Missing shared secret',
-        'Set a shared secret token to prevent unauthorized requests.',
-      );
-      return;
-    }
-
-    if (BackgroundService.isRunning()) {
+    if (isRunning) {
       Alert.alert('Already running', 'The WOL relay is already running.');
       return;
     }
@@ -399,29 +400,25 @@ export default function App() {
       return;
     }
 
-    taskOptions.parameters = { port: portNumber, token: sharedSecret };
     try {
-      await BackgroundService.start(backgroundTask, taskOptions);
-      logStatus(`Foreground service started on port ${portNumber}`);
+      await startWolServer({ port: portNumber, token: sharedSecret || null });
+      logStatus(`Native WOL server started on port ${portNumber}`);
       setIsRunning(true);
     } catch (error) {
       Alert.alert('Failed to start relay', error.message);
     }
-  }, [listenPort, sharedSecret, ensureForegroundServiceReady]);
+  }, [listenPort, sharedSecret, ensureForegroundServiceReady, isRunning]);
 
   const stopRelay = useCallback(async () => {
-    if (!BackgroundService.isRunning()) {
-      return;
-    }
-
+    if (!isRunning) return;
     try {
-      await BackgroundService.stop();
-      shutdownServer();
+      await stopWolServer();
       setIsRunning(false);
+      logStatus('Native WOL server stopped');
     } catch (error) {
       Alert.alert('Failed to stop relay', error.message);
     }
-  }, []);
+  }, [isRunning]);
 
   const statusLabel = useMemo(() => (isRunning ? 'Running' : 'Stopped'), [isRunning]);
 
