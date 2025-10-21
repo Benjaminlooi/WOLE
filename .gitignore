@@ -1,0 +1,64 @@
+# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
+
+# dependencies
+node_modules/
+
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.keystore
+*.key
+*.mobileprovision
+
+# Metro
+.metro-health-check*
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# macOS
+.DS_Store
+*.pem
+
+# local env files
+.env*.local
+
+# typescript
+*.tsbuildinfo
+
+# native projects — keep source, ignore build artifacts
+# Do NOT ignore entire folders because this repo includes custom native code.
+
+# Android
+android/.gradle/
+android/.cxx/
+android/build/
+android/app/build/
+android/local.properties
+android/*.iml
+android/app/debug.keystore
+android/build-log.txt
+
+# Vite web build artifacts served by the embedded server
+# Keep the directory but ignore generated files; CI/build should run `npm run build` in `web/` first.
+android/app/src/main/assets/web/*
+!android/app/src/main/assets/web/.keep
+
+# iOS
+ios/build/
+ios/DerivedData/
+ios/Pods/
+
+# tamagui
+.tamagui/

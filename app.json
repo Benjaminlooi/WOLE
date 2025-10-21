@@ -1,0 +1,42 @@
+{
+  "expo": {
+    "name": "WOLE",
+    "slug": "wol-relay",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "buildToolsVersion": "35.0.0",
+      "edgeToEdgeEnabled": true,
+      "permissions": [
+        "INTERNET",
+        "FOREGROUND_SERVICE",
+        "POST_NOTIFICATIONS",
+        "WAKE_LOCK"
+      ],
+      "foregroundService": {
+        "notificationTitle": "WOL Relay Running",
+        "notificationText": "Listening for Wake-on-LAN requests.",
+        "notificationIcon": "./assets/adaptive-icon.png"
+      },
+      "package": "com.anonymous.wolrelay"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
+  }
+}
