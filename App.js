@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { Alert, Linking, PermissionsAndroid, Platform } from 'react-native';
+import { Alert, Linking, PermissionsAndroid, Platform, Animated, Easing, Modal, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import {
   Button,
-  Card,
   H1,
+  H2,
   Paragraph,
   ScrollView,
   SizableText,
@@ -14,14 +15,20 @@ import {
   XStack,
   YStack,
   Input,
+  Switch,
+  Spacer,
+  Stack,
 } from 'tamagui';
+import { useFonts, Syne_700Bold, Syne_500Medium } from '@expo-google-fonts/syne';
+import { Manrope_400Regular, Manrope_600SemiBold } from '@expo-google-fonts/manrope';
+import { Ionicons } from '@expo/vector-icons';
 import { tamaguiConfig } from './tamagui.config';
 import { startWolServer, stopWolServer } from './native/WolServerModule';
 
 const statusSubscribers = new Set();
 
 const logStatus = (message) => {
-  const timestamped = `[${new Date().toISOString()}] ${message}`;
+  const timestamped = `[${new Date().toISOString().split('T')[1].slice(0, 8)}] ${message}`;
   console.log(timestamped);
   statusSubscribers.forEach((handler) => handler(timestamped));
 };
@@ -33,27 +40,115 @@ const subscribeToStatus = (handler) => {
   };
 };
 
-const StatusChip = ({ isRunning, port, backgroundColor, accentColor, label }) => (
-  <XStack
-    alignItems="center"
-    backgroundColor={backgroundColor}
-    borderRadius="$10"
-    gap="$2"
-    paddingHorizontal="$3"
-    paddingVertical="$1.5"
-  >
-    <SizableText size="$3" fontWeight="700" color={accentColor}>
-      {label}
-    </SizableText>
-    {isRunning && (
-      <SizableText size="$2" color="$color">
-        Port {port}
-      </SizableText>
-    )}
-  </XStack>
-);
-
 const DEFAULT_PORT = '8080';
+
+const StatusOrb = ({ isRunning, onPress }) => {
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const rotateAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (isRunning) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 1.2,
+            duration: 2000,
+            useNativeDriver: true,
+            easing: Easing.inOut(Easing.ease),
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 2000,
+            useNativeDriver: true,
+            easing: Easing.inOut(Easing.ease),
+          }),
+        ])
+      ).start();
+      
+      Animated.loop(
+        Animated.timing(rotateAnim, {
+          toValue: 1,
+          duration: 10000,
+          useNativeDriver: true,
+          easing: Easing.linear,
+        })
+      ).start();
+    } else {
+      pulseAnim.setValue(1);
+      rotateAnim.setValue(0);
+    }
+  }, [isRunning]);
+
+  const spin = rotateAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
+
+  return (
+    <TouchableOpacity onPress={onPress} activeOpacity={0.8}>
+      <Stack alignItems="center" justifyContent="center" width={240} height={240}>
+        {/* Outer Glow */}
+        <Animated.View
+          style={{
+            position: 'absolute',
+            width: 240,
+            height: 240,
+            borderRadius: 120,
+            backgroundColor: isRunning ? 'rgba(34, 211, 238, 0.1)' : 'rgba(239, 68, 68, 0.05)',
+            transform: [{ scale: pulseAnim }],
+          }}
+        />
+        {/* Inner Ring */}
+        <Animated.View
+          style={{
+            position: 'absolute',
+            width: 200,
+            height: 200,
+            borderRadius: 100,
+            borderWidth: 2,
+            borderColor: isRunning ? 'rgba(34, 211, 238, 0.3)' : 'rgba(239, 68, 68, 0.2)',
+            borderStyle: 'dashed',
+            transform: [{ rotate: spin }],
+          }}
+        />
+        {/* Core */}
+        <LinearGradient
+          colors={isRunning ? ['#22d3ee', '#0891b2'] : ['#ef4444', '#991b1b']}
+          style={{
+            width: 160,
+            height: 160,
+            borderRadius: 80,
+            alignItems: 'center',
+            justifyContent: 'center',
+            shadowColor: isRunning ? '#22d3ee' : '#ef4444',
+            shadowOffset: { width: 0, height: 0 },
+            shadowOpacity: 0.5,
+            shadowRadius: 20,
+            elevation: 10,
+          }}
+        >
+          <Ionicons name="power" size={64} color="white" />
+          <SizableText color="white" fontFamily="Syne_700Bold" fontSize={18} marginTop={8}>
+            {isRunning ? 'ONLINE' : 'OFFLINE'}
+          </SizableText>
+        </LinearGradient>
+      </Stack>
+    </TouchableOpacity>
+  );
+};
+
+const GlassCard = ({ children, style }) => (
+  <Stack
+    backgroundColor="rgba(255, 255, 255, 0.05)"
+    borderColor="rgba(255, 255, 255, 0.1)"
+    borderWidth={1}
+    borderRadius={24}
+    padding={20}
+    {...style}
+  >
+    {children}
+  </Stack>
+);
 
 const AppContent = () => {
   const [listenPort, setListenPort] = useState(DEFAULT_PORT);
@@ -61,37 +156,26 @@ const AppContent = () => {
   const [isRunning, setIsRunning] = useState(false);
   const [statusLog, setStatusLog] = useState([]);
   const [activePort, setActivePort] = useState(null);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showLogs, setShowLogs] = useState(false);
   const logScrollRef = useRef(null);
 
   useEffect(() => {
     return subscribeToStatus((entry) => {
       setStatusLog((current) => {
         const next = [entry, ...current];
-        return next.slice(0, 200);
+        return next.slice(0, 50);
       });
     });
   }, []);
 
   useEffect(() => {
     setIsRunning(false);
-  }, []);
-
-  useEffect(() => {
     startRelay();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  useEffect(() => {
-    if (logScrollRef.current) {
-      logScrollRef.current.scrollTo({ y: 0, animated: true });
-    }
-  }, [statusLog]);
 
   const ensureForegroundServiceReady = useCallback(async () => {
-    if (Platform.OS !== 'android') {
-      return true;
-    }
-
+    if (Platform.OS !== 'android') return true;
     const sdkInt = Number(Platform.Version);
     if (!Number.isNaN(sdkInt) && sdkInt >= 33) {
       try {
@@ -99,21 +183,13 @@ const AppContent = () => {
           PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
         );
         if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
-          Alert.alert(
-            'Notifications required',
-            'Grant notification permission to run the foreground service.',
-          );
+          Alert.alert('Notifications required', 'Grant notification permission to run the foreground service.');
           return false;
         }
       } catch (e) {
-        Alert.alert(
-          'Permission error',
-          'Could not request notification permission.',
-        );
         return false;
       }
     }
-
     return true;
   }, []);
 
@@ -123,16 +199,10 @@ const AppContent = () => {
       Alert.alert('Invalid port', 'Please enter a TCP port between 1 and 65535.');
       return;
     }
-
-    if (isRunning) {
-      Alert.alert('Already running', 'The WOL relay is already running.');
-      return;
-    }
+    if (isRunning) return;
 
     const ok = await ensureForegroundServiceReady();
-    if (!ok) {
-      return;
-    }
+    if (!ok) return;
 
     try {
       await startWolServer({ port: portNumber, token: sharedSecret || null });
@@ -156,249 +226,185 @@ const AppContent = () => {
     }
   }, [isRunning]);
 
-  const handleClearLog = useCallback(() => {
-    setStatusLog([]);
-  }, []);
+  const toggleRelay = () => {
+    if (isRunning) stopRelay();
+    else startRelay();
+  };
 
   const handleOpenWebUi = useCallback(() => {
     const portNumber = Number(activePort ?? listenPort);
-    if (Number.isNaN(portNumber) || portNumber <= 0 || portNumber > 65535) {
-      Alert.alert('Invalid port', 'Set a valid port before opening the web UI.');
-      return;
-    }
-
     const url = `http://127.0.0.1:${portNumber}/`;
-    Linking.openURL(url).catch(() => {
-      Alert.alert('Open failed', 'Could not launch the relay web interface.');
-    });
+    Linking.openURL(url).catch(() => Alert.alert('Error', 'Could not open browser'));
   }, [activePort, listenPort]);
 
-  const handleOpenBatterySettings = useCallback(() => {
-    if (Platform.OS === 'android') {
-      Linking.openSettings().catch(() => {
-        Alert.alert(
-          'Settings unavailable',
-          'Open system settings manually to disable battery optimizations for this app.',
-        );
-      });
-      return;
-    }
-
-    Alert.alert('Android only', 'Battery optimization settings are only available on Android.');
-  }, []);
-
-  const statusInfo = useMemo(() => {
-    const portLabel = activePort ?? listenPort;
-    return {
-      label: isRunning ? 'Running' : 'Stopped',
-      hint: isRunning
-        ? `Listening on port ${portLabel} for authenticated wake requests.`
-        : 'Start the relay to accept remote wake packets.',
-      accentColor: isRunning ? '#22c55e' : '#f87171',
-      chipBackground: isRunning ? 'rgba(34,197,94,0.16)' : 'rgba(248,113,113,0.16)',
-      portLabel,
-    };
-  }, [activePort, isRunning, listenPort]);
-
   return (
-    <SafeAreaView style={{ flex: 1 }}>
-      <StatusBar style="light" />
-      <YStack flex={1} backgroundColor="$background">
-        <ScrollView showsVerticalScrollIndicator={false}>
-          <YStack paddingHorizontal="$5" paddingBottom="$8" paddingTop="$6" gap="$6">
-            <Card
-              elevate
-              size="$5"
+    <LinearGradient
+      colors={['#0f172a', '#1e293b', '#0f172a']}
+      style={{ flex: 1 }}
+    >
+      <SafeAreaView style={{ flex: 1 }}>
+        <StatusBar style="light" />
+        
+        {/* Header */}
+        <XStack paddingHorizontal={24} paddingTop={12} justifyContent="space-between" alignItems="center">
+          <YStack>
+            <SizableText fontFamily="Syne_700Bold" fontSize={32} color="white">WOLE</SizableText>
+            <SizableText fontFamily="Manrope_400Regular" fontSize={14} color="rgba(255,255,255,0.5)">Relay Station</SizableText>
+          </YStack>
+          <TouchableOpacity onPress={() => setShowSettings(true)}>
+            <Stack backgroundColor="rgba(255,255,255,0.1)" padding={10} borderRadius={20}>
+              <Ionicons name="settings-outline" size={24} color="white" />
+            </Stack>
+          </TouchableOpacity>
+        </XStack>
+
+        {/* Main Content */}
+        <YStack flex={1} alignItems="center" justifyContent="center" gap={40}>
+          <StatusOrb isRunning={isRunning} onPress={toggleRelay} />
+          
+          <YStack alignItems="center" gap={8}>
+            <SizableText fontFamily="Manrope_600SemiBold" fontSize={18} color="white">
+              {isRunning ? `Listening on Port ${activePort}` : 'Service Stopped'}
+            </SizableText>
+            <SizableText fontFamily="Manrope_400Regular" fontSize={14} color="rgba(255,255,255,0.5)" textAlign="center" maxWidth={280}>
+              {isRunning 
+                ? 'Ready to forward Wake-on-LAN packets from authorized web clients.' 
+                : 'Tap the orb to start the relay service.'}
+            </SizableText>
+          </YStack>
+
+          {isRunning && (
+            <Button
+              backgroundColor="rgba(34, 211, 238, 0.15)"
+              borderColor="rgba(34, 211, 238, 0.3)"
               borderWidth={1}
-              borderColor="$borderColor"
-              padding="$5"
-              borderRadius="$8"
-              gap="$4"
+              color="#22d3ee"
+              icon={<Ionicons name="globe-outline" size={18} color="#22d3ee" />}
+              onPress={handleOpenWebUi}
+              pressStyle={{ backgroundColor: 'rgba(34, 211, 238, 0.25)' }}
+              borderRadius={100}
+              paddingHorizontal={24}
             >
-              <YStack gap="$2">
-                <H1 size="$8" color="$color">
-                  WOLE Relay
-                </H1>
-                <Paragraph size="$4" theme="alt1">
-                  Manage the Wake-on-LAN relay service running on this device.
-                </Paragraph>
-              </YStack>
+              Open Web Dashboard
+            </Button>
+          )}
+        </YStack>
 
-              <YStack gap="$3">
-                <StatusChip
-                  isRunning={isRunning}
-                  port={statusInfo.portLabel}
-                  backgroundColor={statusInfo.chipBackground}
-                  accentColor={statusInfo.accentColor}
-                  label={statusInfo.label}
-                />
-                <Paragraph size="$3" theme="alt1">
-                  {statusInfo.hint}
-                </Paragraph>
-              </YStack>
+        {/* Footer Actions */}
+        <XStack padding={24} justifyContent="center">
+          <TouchableOpacity onPress={() => setShowLogs(true)}>
+            <XStack alignItems="center" gap={8}>
+              <Ionicons name="terminal-outline" size={16} color="rgba(255,255,255,0.5)" />
+              <SizableText fontFamily="Manrope_600SemiBold" fontSize={14} color="rgba(255,255,255,0.5)">
+                View System Logs
+              </SizableText>
+            </XStack>
+          </TouchableOpacity>
+        </XStack>
 
-              <YStack gap="$3">
-                <XStack gap="$3" flexWrap="wrap">
-                  <Button
-                    theme="blue"
-                    size="$4"
-                    flex={1}
-                    disabled={isRunning}
-                    onPress={startRelay}
-                  >
-                    Start Relay
-                  </Button>
-                  <Button
-                    theme="red"
-                    size="$4"
-                    flex={1}
-                    disabled={!isRunning}
-                    onPress={stopRelay}
-                  >
-                    Stop Relay
-                  </Button>
-                </XStack>
+        {/* Settings Modal */}
+        <Modal visible={showSettings} animationType="slide" transparent>
+          <Stack flex={1} backgroundColor="rgba(0,0,0,0.8)">
+            <Stack flex={1} onPress={() => setShowSettings(false)} />
+            <GlassCard style={{ borderBottomLeftRadius: 0, borderBottomRightRadius: 0, paddingBottom: 40 }}>
+              <XStack justifyContent="space-between" alignItems="center" marginBottom={24}>
+                <SizableText fontFamily="Syne_700Bold" fontSize={24} color="white">Configuration</SizableText>
+                <TouchableOpacity onPress={() => setShowSettings(false)}>
+                  <Ionicons name="close-circle" size={32} color="rgba(255,255,255,0.5)" />
+                </TouchableOpacity>
+              </XStack>
+              
+              <YStack gap={20}>
+                <YStack gap={8}>
+                  <SizableText color="rgba(255,255,255,0.7)" fontFamily="Manrope_600SemiBold">Listen Port</SizableText>
+                  <Input
+                    value={listenPort}
+                    onChangeText={setListenPort}
+                    keyboardType="numeric"
+                    backgroundColor="rgba(0,0,0,0.3)"
+                    borderColor="rgba(255,255,255,0.1)"
+                    color="white"
+                    editable={!isRunning}
+                  />
+                </YStack>
+                
+                <YStack gap={8}>
+                  <SizableText color="rgba(255,255,255,0.7)" fontFamily="Manrope_600SemiBold">Auth Token (Optional)</SizableText>
+                  <Input
+                    value={sharedSecret}
+                    onChangeText={setSharedSecret}
+                    secureTextEntry
+                    backgroundColor="rgba(0,0,0,0.3)"
+                    borderColor="rgba(255,255,255,0.1)"
+                    color="white"
+                    editable={!isRunning}
+                    placeholder="Leave empty for no auth"
+                    placeholderTextColor="rgba(255,255,255,0.2)"
+                  />
+                </YStack>
+
                 <Button
-                  theme="blue"
-                  variant="outlined"
-                  size="$4"
-                  disabled={!isRunning}
-                  onPress={handleOpenWebUi}
-                >
-                  Open Web UI
-                </Button>
-                <Button
-                  variant="outlined"
-                  size="$4"
-                  onPress={handleOpenBatterySettings}
+                  onPress={() => { Linking.openSettings(); }}
+                  backgroundColor="rgba(255,255,255,0.1)"
+                  color="white"
+                  icon={<Ionicons name="battery-charging-outline" size={18} color="white" />}
                 >
                   Battery Optimization Settings
                 </Button>
-                <Paragraph size="$2" theme="alt1">
-                  Disable optimizations so the relay stays responsive in the background.
-                </Paragraph>
               </YStack>
-            </Card>
+            </GlassCard>
+          </Stack>
+        </Modal>
 
-            <Card
-              elevate
-              size="$5"
-              borderWidth={1}
-              borderColor="$borderColor"
-              padding="$5"
-              borderRadius="$8"
-              gap="$4"
-            >
-              <YStack gap="$2">
-                <SizableText size="$5" fontWeight="600" color="$color">
-                  Configuration
-                </SizableText>
-                <Paragraph size="$3" theme="alt1">
-                  Define how the relay listens for wake requests from your network.
-                </Paragraph>
-              </YStack>
-
-              <YStack gap="$2">
-                <SizableText size="$3" fontWeight="600" color="$color">
-                  Listen Port
-                </SizableText>
-                <Input
-                  value={listenPort}
-                  onChangeText={setListenPort}
-                  placeholder="8080"
-                  keyboardType="numeric"
-                  autoCorrect={false}
-                  autoCapitalize="none"
-                />
-                <Paragraph size="$2" theme="alt1">
-                  Choose a TCP port that is reachable from your devices.
-                </Paragraph>
-              </YStack>
-
-              <YStack gap="$2">
-                <SizableText size="$3" fontWeight="600" color="$color">
-                  Shared Secret Token
-                </SizableText>
-                <Input
-                  value={sharedSecret}
-                  onChangeText={setSharedSecret}
-                  placeholder="Required if relay is exposed publicly"
-                  secureTextEntry
-                  autoCorrect={false}
-                  autoCapitalize="none"
-                />
-                <Paragraph size="$2" theme="alt1">
-                  Optional for trusted networks; recommended when the relay can be reached from the internet.
-                </Paragraph>
-              </YStack>
-            </Card>
-
-            <Card
-              elevate
-              size="$5"
-              borderWidth={1}
-              borderColor="$borderColor"
-              padding="$5"
-              borderRadius="$8"
-              gap="$4"
-            >
-              <XStack alignItems="center" justifyContent="space-between">
-                <SizableText size="$5" fontWeight="600" color="$color">
-                  Event Log
-                </SizableText>
-                <Button
-                  size="$3"
-                  variant="outlined"
-                  disabled={!statusLog.length}
-                  onPress={handleClearLog}
-                >
-                  Clear
-                </Button>
+        {/* Logs Modal */}
+        <Modal visible={showLogs} animationType="slide" transparent>
+          <Stack flex={1} backgroundColor="rgba(0,0,0,0.8)">
+            <Stack flex={1} onPress={() => setShowLogs(false)} />
+            <GlassCard style={{ height: '60%', borderBottomLeftRadius: 0, borderBottomRightRadius: 0 }}>
+              <XStack justifyContent="space-between" alignItems="center" marginBottom={16}>
+                <SizableText fontFamily="Syne_700Bold" fontSize={20} color="white">System Logs</SizableText>
+                <TouchableOpacity onPress={() => setStatusLog([])}>
+                  <SizableText color="#ef4444" fontFamily="Manrope_600SemiBold">Clear</SizableText>
+                </TouchableOpacity>
               </XStack>
-              <Paragraph size="$3" theme="alt1">
-                Recent activity and status messages from the native relay service.
-              </Paragraph>
-              <YStack
-                borderWidth={1}
-                borderColor="$borderColor"
-                borderRadius="$6"
-                backgroundColor="rgba(2,6,23,0.65)"
-                overflow="hidden"
+              <ScrollView
+                ref={logScrollRef}
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={{ paddingBottom: 20 }}
               >
-                <ScrollView
-                  ref={logScrollRef}
-                  style={{ maxHeight: 260 }}
-                  contentContainerStyle={{ padding: 16 }}
-                  showsVerticalScrollIndicator={false}
-                >
-                  <YStack gap="$2">
-                    {statusLog.map((entry, index) => (
-                      <SizableText
-                        key={`${entry}-${index}`}
-                        size="$2"
-                        fontFamily="$mono"
-                        color="$color"
-                      >
-                        {entry}
-                      </SizableText>
-                    ))}
-                    {!statusLog.length && (
-                      <Paragraph size="$2" theme="alt1" fontStyle="italic">
-                        No events yet. Start the relay to begin logging.
-                      </Paragraph>
-                    )}
-                  </YStack>
-                </ScrollView>
-              </YStack>
-            </Card>
-          </YStack>
-        </ScrollView>
-      </YStack>
-    </SafeAreaView>
+                {statusLog.map((log, i) => (
+                  <SizableText key={i} fontFamily="monospace" fontSize={12} color="rgba(255,255,255,0.7)" marginBottom={8}>
+                    {log}
+                  </SizableText>
+                ))}
+                {statusLog.length === 0 && (
+                  <SizableText color="rgba(255,255,255,0.3)" textAlign="center" marginTop={20}>No logs yet.</SizableText>
+                )}
+              </ScrollView>
+              <Button onPress={() => setShowLogs(false)} marginTop={16} backgroundColor="rgba(255,255,255,0.1)" color="white">
+                Close
+              </Button>
+            </GlassCard>
+          </Stack>
+        </Modal>
+
+      </SafeAreaView>
+    </LinearGradient>
   );
 };
 
 export default function App() {
+  const [fontsLoaded] = useFonts({
+    Syne_700Bold,
+    Syne_500Medium,
+    Manrope_400Regular,
+    Manrope_600SemiBold,
+  });
+
+  if (!fontsLoaded) {
+    return null;
+  }
+
   return (
     <TamaguiProvider config={tamaguiConfig}>
       <Theme name="dark">

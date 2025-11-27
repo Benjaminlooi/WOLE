@@ -23,10 +23,14 @@
     "build:web": "npm --prefix web run build"
   },
   "dependencies": {
+    "@expo-google-fonts/manrope": "^0.4.2",
+    "@expo-google-fonts/syne": "^0.4.2",
     "@tamagui/config": "^1.135.4",
     "@tamagui/metro-plugin": "^1.135.4",
     "expo": "~54.0.13",
     "expo-dev-client": "~6.0.15",
+    "expo-font": "~14.0.9",
+    "expo-linear-gradient": "~15.0.7",
     "expo-status-bar": "~3.0.8",
     "react": "19.1.0",
     "react-native": "0.81.4",

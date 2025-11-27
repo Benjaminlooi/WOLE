@@ -4,7 +4,13 @@
   "version": "0.0.1",
   "description": "WOLE web UI bundled into Android assets for an Android WOL relay over HTTP (the ‘UpSnap for Android’, unofficially)",
   "license": "MIT",
-  "keywords": ["wol", "wake-on-lan", "web-ui", "vite", "react"],
+  "keywords": [
+    "wol",
+    "wake-on-lan",
+    "web-ui",
+    "vite",
+    "react"
+  ],
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -16,6 +22,7 @@
     "@tailwindcss/vite": "^4.1.15",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "framer-motion": "^12.23.24",
     "lucide-react": "^0.546.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

@@ -1,6 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { Settings, Plus, Power, Trash2, Edit2, X, Monitor, Wifi } from 'lucide-react'
 import { Button } from './components/ui/button'
 import { Input } from './components/ui/input'
+import { clsx } from 'clsx'
+import { twMerge } from 'tailwind-merge'
+
+function cn(...inputs) {
+  return twMerge(clsx(inputs))
+}
 
 function useToken() {
   const [token, setToken] = useState('')
@@ -32,7 +40,9 @@ export default function App() {
   const [devices, setDevices] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [theme, setTheme] = useState(() => (document.documentElement.classList.contains('dark') ? 'dark' : 'light'))
+  const [showSettings, setShowSettings] = useState(false)
+  const [showAddDevice, setShowAddDevice] = useState(false)
+  const [editingDevice, setEditingDevice] = useState(null)
 
   const headers = useMemo(() => ({ 'Content-Type': 'application/json' }), [])
 
@@ -50,17 +60,15 @@ export default function App() {
 
   useEffect(() => { load() }, [])
 
-  useEffect(() => {
-    document.documentElement.classList.toggle('dark', theme === 'dark')
-    try { localStorage.setItem('theme', theme) } catch {}
-  }, [theme])
-
   async function saveDevice(d) {
     await api('/api/devices', { method: 'POST', headers, body: JSON.stringify(d) })
     await load()
+    setShowAddDevice(false)
+    setEditingDevice(null)
   }
 
   async function del(id) {
+    if (!confirm('Are you sure you want to remove this device?')) return
     await api(`/api/devices/${id}`, { method: 'DELETE' })
     await load()
   }
@@ -70,150 +78,304 @@ export default function App() {
     data.set('mac', d.mac); if (d.ip) data.set('ip', d.ip); if (d.port) data.set('port', d.port)
     const headers = {}
     if (token) headers['X-Auth-Token'] = token
-    const res = await fetch('/wol', { method: 'POST', body: data, headers })
-    const text = await res.text()
-    alert(res.ok ? text : `Error: ${text}`)
+    
+    try {
+      const res = await fetch('/wol', { method: 'POST', body: data, headers })
+      const text = await res.text()
+      // Optional: Show toast notification here instead of alert
+      if (!res.ok) throw new Error(text)
+    } catch (e) {
+      alert(`Error: ${e.message}`)
+    }
   }
 
   return (
-    <div className='min-h-dvh'>
-      <div className='mx-auto max-w-4xl p-4 md:p-6'>
-        <header className='mb-4 flex items-center justify-between gap-3'>
-          <h1 className='m-0 flex items-center gap-2 text-2xl font-semibold'>
-            Wake On LAN <span className='rounded-full border px-2 py-0.5 text-xs text-muted-foreground'>Web</span>
-          </h1>
-          <ThemeToggle theme={theme} setTheme={setTheme} />
-        </header>
-
-        <section className='rounded-xl border bg-card p-4 text-card-foreground shadow-sm md:p-5' aria-labelledby='auth-heading'>
-          <h3 id='auth-heading' className='mb-3 text-base font-medium'>Auth</h3>
-          <div className='flex flex-wrap items-center gap-2'>
-            <Input placeholder='Enter token if configured' value={token} onChange={(e) => setToken(e.target.value)} aria-label='Auth token' className='w-64' />
-            <Button variant='ghost' type='button' onClick={() => setToken('')}>Clear</Button>
-          </div>
-          <div className='mt-2 text-xs text-muted-foreground'>Token is stored locally and added to requests.</div>
-        </section>
-
-        <section className='mt-4 rounded-xl border bg-card p-0 text-card-foreground shadow-sm'>
-          <div className='p-4 md:p-5'>
-            <h3 id='devices-heading' className='mb-3 text-base font-medium'>Devices</h3>
-            {loading ? (
-              <div className='flex items-center gap-2' role='status' aria-live='polite'>
-                <span className='inline-block h-4 w-4 animate-spin rounded-full border-2 border-primary border-r-transparent'></span>
-                <span>Loading…</span>
-              </div>
-            ) : error ? (
-              <div className='text-sm text-red-500' role='alert'>Error: {error}</div>
-            ) : devices.length === 0 ? (
-              <div className='text-sm text-muted-foreground'>No devices yet. Add one below.</div>
-            ) : null}
-          </div>
-          {devices.length > 0 && !loading && !error && (
-            <div className='overflow-x-auto rounded-b-xl border-t'>
-              <table className='w-full min-w-[640px] border-collapse text-sm'>
-                <thead className='bg-muted/40 text-muted-foreground'>
-                  <tr>
-                    <th className='px-3 py-2 text-left text-xs uppercase tracking-wide'>Name</th>
-                    <th className='px-3 py-2 text-left text-xs uppercase tracking-wide'>MAC</th>
-                    <th className='px-3 py-2 text-left text-xs uppercase tracking-wide'>IP</th>
-                    <th className='px-3 py-2 text-left text-xs uppercase tracking-wide'>Port</th>
-                    <th className='px-3 py-2 text-left text-xs uppercase tracking-wide'>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {devices.map((d) => (
-                    <tr key={d.id} className='hover:bg-accent/40'>
-                      <td className='border-t border-border px-3 py-2'>{d.name}</td>
-                      <td className='border-t border-border px-3 py-2 font-mono text-xs'>{d.mac}</td>
-                      <td className='border-t border-border px-3 py-2'>{d.ip}</td>
-                      <td className='border-t border-border px-3 py-2'>{d.port}</td>
-                      <td className='border-t border-border px-3 py-2'>
-                        <div className='flex gap-2'>
-                          <Button onClick={() => wake(d)}>Wake</Button>
-                          <Button variant='outline' onClick={() => saveDevice(d)}>Edit</Button>
-                          <Button variant='destructive' onClick={() => del(d.id)}>Delete</Button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
-
-        <section className='mt-4 rounded-xl border bg-card p-4 text-card-foreground shadow-sm md:p-5' aria-labelledby='form-heading'>
-          <h3 id='form-heading' className='mb-3 text-base font-medium'>Add / Update Device</h3>
-          <DeviceForm onSave={saveDevice} />
-        </section>
+    <div className='min-h-screen w-full relative overflow-hidden text-foreground selection:bg-primary/30'>
+      {/* Background Ambience */}
+      <div className='fixed inset-0 pointer-events-none z-0'>
+        <div className='absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-primary/10 rounded-full blur-[120px]' />
+        <div className='absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-purple-500/10 rounded-full blur-[120px]' />
       </div>
+
+      <div className='relative z-10 container mx-auto px-4 py-8 md:py-12 max-w-5xl'>
+        <motion.header 
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, ease: "easeOut" }}
+          className='flex items-center justify-between mb-12'
+        >
+          <div>
+            <h1 className='text-4xl md:text-5xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-white to-white/70 drop-shadow-sm'>
+              WOLE
+            </h1>
+            <p className='text-muted-foreground mt-1 font-sans text-lg'>Wake On LAN Relay</p>
+          </div>
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className="rounded-full hover:bg-white/10 text-white/80 hover:text-white transition-colors"
+            onClick={() => setShowSettings(true)}
+          >
+            <Settings className="w-6 h-6" />
+          </Button>
+        </motion.header>
+
+        <main>
+          {loading ? (
+            <div className='flex justify-center py-20'>
+              <div className='animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary'></div>
+            </div>
+          ) : error ? (
+            <div className='text-red-400 bg-red-900/20 p-4 rounded-xl border border-red-500/20 text-center'>
+              Error: {error}
+            </div>
+          ) : (
+            <motion.div 
+              className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6'
+              initial="hidden"
+              animate="show"
+              variants={{
+                hidden: { opacity: 0 },
+                show: {
+                  opacity: 1,
+                  transition: {
+                    staggerChildren: 0.1
+                  }
+                }
+              }}
+            >
+              <AnimatePresence>
+                {devices.map((d) => (
+                  <DeviceCard 
+                    key={d.id} 
+                    device={d} 
+                    onWake={() => wake(d)} 
+                    onEdit={() => { setEditingDevice(d); setShowAddDevice(true) }}
+                    onDelete={() => del(d.id)}
+                  />
+                ))}
+              </AnimatePresence>
+              
+              {/* Add Device Card */}
+              <motion.button
+                variants={{
+                  hidden: { opacity: 0, y: 20 },
+                  show: { opacity: 1, y: 0 }
+                }}
+                whileHover={{ scale: 1.02, backgroundColor: "rgba(255,255,255,0.08)" }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => { setEditingDevice(null); setShowAddDevice(true) }}
+                className='glass-panel rounded-2xl p-6 flex flex-col items-center justify-center min-h-[200px] gap-4 group cursor-pointer border-dashed border-white/20 hover:border-primary/50 transition-colors'
+              >
+                <div className='w-12 h-12 rounded-full bg-white/5 flex items-center justify-center group-hover:bg-primary/20 transition-colors'>
+                  <Plus className='w-6 h-6 text-white/50 group-hover:text-primary transition-colors' />
+                </div>
+                <span className='text-muted-foreground font-medium group-hover:text-primary transition-colors'>Add Device</span>
+              </motion.button>
+            </motion.div>
+          )}
+        </main>
+      </div>
+
+      {/* Settings Modal */}
+      <Modal open={showSettings} onClose={() => setShowSettings(false)} title="Settings">
+        <div className='space-y-4'>
+          <div className='space-y-2'>
+            <label className='text-sm font-medium text-muted-foreground'>Auth Token</label>
+            <div className='flex gap-2'>
+              <Input 
+                type="password"
+                placeholder='Enter token if configured' 
+                value={token} 
+                onChange={(e) => setToken(e.target.value)} 
+                className='bg-white/5 border-white/10 focus:border-primary/50'
+              />
+              <Button variant='outline' onClick={() => setToken('')}>Clear</Button>
+            </div>
+            <p className='text-xs text-muted-foreground'>Token is stored locally and added to requests.</p>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Add/Edit Device Modal */}
+      <Modal 
+        open={showAddDevice} 
+        onClose={() => { setShowAddDevice(false); setEditingDevice(null) }} 
+        title={editingDevice ? "Edit Device" : "Add Device"}
+      >
+        <DeviceForm 
+          initialData={editingDevice} 
+          onSave={saveDevice} 
+          onCancel={() => { setShowAddDevice(false); setEditingDevice(null) }} 
+        />
+      </Modal>
     </div>
   )
 }
 
-function DeviceForm({ onSave }) {
-  const [name, setName] = useState('')
-  const [mac, setMac] = useState('')
-  const [ip, setIp] = useState('255.255.255.255')
-  const [port, setPort] = useState(9)
+function DeviceCard({ device, onWake, onEdit, onDelete }) {
+  const [waking, setWaking] = useState(false)
+
+  const handleWake = async () => {
+    setWaking(true)
+    await onWake()
+    setTimeout(() => setWaking(false), 2000)
+  }
+
+  return (
+    <motion.div
+      variants={{
+        hidden: { opacity: 0, y: 20 },
+        show: { opacity: 1, y: 0 }
+      }}
+      className='glass-panel rounded-2xl p-6 relative group overflow-hidden'
+    >
+      <div className='absolute top-0 right-0 p-4 opacity-0 group-hover:opacity-100 transition-opacity flex gap-2'>
+        <button onClick={onEdit} className='p-2 hover:bg-white/10 rounded-full text-white/60 hover:text-white transition-colors'>
+          <Edit2 className='w-4 h-4' />
+        </button>
+        <button onClick={onDelete} className='p-2 hover:bg-red-500/20 rounded-full text-white/60 hover:text-red-400 transition-colors'>
+          <Trash2 className='w-4 h-4' />
+        </button>
+      </div>
+
+      <div className='flex items-start gap-4 mb-6'>
+        <div className='p-3 rounded-xl bg-primary/10 text-primary'>
+          <Monitor className='w-6 h-6' />
+        </div>
+        <div>
+          <h3 className='font-bold text-lg leading-tight text-white'>{device.name}</h3>
+          <p className='text-xs font-mono text-muted-foreground mt-1'>{device.mac}</p>
+        </div>
+      </div>
+
+      <div className='space-y-2 mb-6'>
+        <div className='flex items-center justify-between text-sm'>
+          <span className='text-muted-foreground'>IP Address</span>
+          <span className='font-mono text-white/80'>{device.ip || 'Broadcast'}</span>
+        </div>
+        <div className='flex items-center justify-between text-sm'>
+          <span className='text-muted-foreground'>Port</span>
+          <span className='font-mono text-white/80'>{device.port}</span>
+        </div>
+      </div>
+
+      <Button 
+        className={cn(
+          "w-full h-12 text-base font-semibold shadow-lg shadow-primary/20 transition-all duration-500",
+          waking ? "bg-green-500 hover:bg-green-600 text-white shadow-green-500/20" : "bg-primary hover:bg-primary/90 text-primary-foreground"
+        )}
+        onClick={handleWake}
+        disabled={waking}
+      >
+        <Power className={cn("w-5 h-5 mr-2", waking && "animate-pulse")} />
+        {waking ? "Signal Sent" : "Wake Up"}
+      </Button>
+    </motion.div>
+  )
+}
+
+function Modal({ open, onClose, title, children }) {
+  return (
+    <AnimatePresence>
+      {open && (
+        <>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={onClose}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50"
+          />
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="w-full max-w-md bg-[#0f172a] border border-white/10 rounded-2xl shadow-2xl pointer-events-auto overflow-hidden"
+            >
+              <div className="flex items-center justify-between p-6 border-b border-white/5">
+                <h2 className="text-xl font-bold font-display">{title}</h2>
+                <button onClick={onClose} className="text-muted-foreground hover:text-white transition-colors">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="p-6">
+                {children}
+              </div>
+            </motion.div>
+          </div>
+        </>
+      )}
+    </AnimatePresence>
+  )
+}
+
+function DeviceForm({ initialData, onSave, onCancel }) {
+  const [name, setName] = useState(initialData?.name || '')
+  const [mac, setMac] = useState(initialData?.mac || '')
+  const [ip, setIp] = useState(initialData?.ip || '255.255.255.255')
+  const [port, setPort] = useState(initialData?.port || 9)
   const [saving, setSaving] = useState(false)
-  const [msg, setMsg] = useState('')
 
   async function submit(e) {
     e.preventDefault()
-    setSaving(true); setMsg('')
+    setSaving(true)
     try {
-      await onSave({ name, mac, ip, port: Number(port) || 9 })
-      setMsg('Saved')
-      setName(''); setMac(''); setIp('255.255.255.255'); setPort(9)
+      await onSave({ ...initialData, name, mac, ip, port: Number(port) || 9 })
     } catch (e) {
-      setMsg(`Error: ${e.message}`)
-    } finally {
+      alert(e.message)
       setSaving(false)
     }
   }
 
   return (
-    <form onSubmit={submit} className='grid max-w-[600px] gap-2'>
-      <label className='grid gap-1 text-sm text-muted-foreground'>
-        Name
-        <Input required value={name} onChange={e => setName(e.target.value)} />
-      </label>
-      <label className='grid gap-1 text-sm text-muted-foreground'>
-        MAC
-        <Input required placeholder='AA:BB:CC:DD:EE:FF' value={mac} onChange={e => setMac(e.target.value)} />
-      </label>
-      <div className='grid grid-cols-1 gap-2 sm:grid-cols-2'>
-        <label className='grid gap-1 text-sm text-muted-foreground'>
-          Broadcast IP
-          <Input value={ip} onChange={e => setIp(e.target.value)} />
-        </label>
-        <label className='grid gap-1 text-sm text-muted-foreground'>
-          Port
-          <Input type='number' value={port} onChange={e => setPort(e.target.value)} />
-        </label>
+    <form onSubmit={submit} className='space-y-4'>
+      <div className='space-y-2'>
+        <label className='text-sm font-medium text-muted-foreground'>Name</label>
+        <Input 
+          required 
+          value={name} 
+          onChange={e => setName(e.target.value)} 
+          className='bg-white/5 border-white/10 focus:border-primary/50'
+          placeholder="My PC"
+        />
       </div>
-      <div className='mt-1 flex items-center gap-2'>
-        <Button type='submit' disabled={saving}>
-          {saving ? 'Saving…' : 'Save'}
+      <div className='space-y-2'>
+        <label className='text-sm font-medium text-muted-foreground'>MAC Address</label>
+        <Input 
+          required 
+          placeholder='AA:BB:CC:DD:EE:FF' 
+          value={mac} 
+          onChange={e => setMac(e.target.value)} 
+          className='bg-white/5 border-white/10 focus:border-primary/50 font-mono'
+        />
+      </div>
+      <div className='grid grid-cols-2 gap-4'>
+        <div className='space-y-2'>
+          <label className='text-sm font-medium text-muted-foreground'>IP Address</label>
+          <Input 
+            value={ip} 
+            onChange={e => setIp(e.target.value)} 
+            className='bg-white/5 border-white/10 focus:border-primary/50 font-mono'
+          />
+        </div>
+        <div className='space-y-2'>
+          <label className='text-sm font-medium text-muted-foreground'>Port</label>
+          <Input 
+            type='number' 
+            value={port} 
+            onChange={e => setPort(e.target.value)} 
+            className='bg-white/5 border-white/10 focus:border-primary/50 font-mono'
+          />
+        </div>
+      </div>
+      <div className='flex gap-3 pt-4'>
+        <Button type='button' variant='ghost' className='flex-1' onClick={onCancel}>Cancel</Button>
+        <Button type='submit' className='flex-1' disabled={saving}>
+          {saving ? 'Saving…' : 'Save Device'}
         </Button>
-        {msg ? <span className='text-xs text-muted-foreground' role='status' aria-live='polite'>{msg}</span> : null}
       </div>
     </form>
-  )
-}
-
-function ThemeToggle({ theme, setTheme }) {
-  const next = theme === 'dark' ? 'light' : 'dark'
-  return (
-    <Button
-      variant='outline'
-      type='button'
-      aria-label={`Switch to ${next} mode`}
-      title={`Switch to ${next} mode`}
-      onClick={() => setTheme(next)}
-    >
-      {theme === 'dark' ? '🌙 Dark' : '☀️ Light'}
-    </Button>
   )
 }
