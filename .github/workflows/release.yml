@@ -1,0 +1,81 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Install Root Dependencies
+        run: npm install
+
+      - name: Install Web Dependencies
+        run: cd web && npm install
+
+      - name: Expo Prebuild
+        run: npx expo prebuild -p android
+
+      - name: Build Web
+        run: npm run build:web
+
+      - name: Zip Web Build
+        run: |
+          cd android/app/src/main/assets/web
+          zip -r $GITHUB_WORKSPACE/web-build.zip .
+
+      - name: Decode Keystore
+        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          echo $ANDROID_KEYSTORE_BASE64 | base64 --decode > android/app/release.keystore
+
+      - name: Build Android Release
+        env:
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+        run: |
+          cd android
+          chmod +x gradlew
+          if [ -f "app/release.keystore" ]; then
+            ./gradlew assembleRelease \
+              -PMYAPP_UPLOAD_STORE_FILE=release.keystore \
+              -PMYAPP_UPLOAD_STORE_PASSWORD=$ANDROID_STORE_PASSWORD \
+              -PMYAPP_UPLOAD_KEY_ALIAS=$ANDROID_KEY_ALIAS \
+              -PMYAPP_UPLOAD_KEY_PASSWORD=$ANDROID_KEY_PASSWORD
+          else
+            echo "No keystore found, building with debug signing (or default config)"
+            ./gradlew assembleRelease
+          fi
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            android/app/build/outputs/apk/release/app-release.apk
+            web-build.zip
+          draft: false
+          prerelease: false
