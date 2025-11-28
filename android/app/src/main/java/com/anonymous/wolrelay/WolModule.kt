@@ -46,4 +46,24 @@ class WolModule(private val reactContext: ReactApplicationContext) : ReactContex
             promise.reject("STOP_ERROR", e)
         }
     }
+
+    @ReactMethod
+    fun getLogs(promise: Promise) {
+        try {
+            val logs = FileLogger.getLogs(reactContext.applicationContext)
+            promise.resolve(logs)
+        } catch (e: Exception) {
+            promise.reject("GET_LOGS_ERROR", e)
+        }
+    }
+
+    @ReactMethod
+    fun clearLogs(promise: Promise) {
+        try {
+            FileLogger.clearLogs(reactContext.applicationContext)
+            promise.resolve(true)
+        } catch (e: Exception) {
+            promise.reject("CLEAR_LOGS_ERROR", e)
+        }
+    }
 }

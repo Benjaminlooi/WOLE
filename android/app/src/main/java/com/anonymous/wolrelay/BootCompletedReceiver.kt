@@ -7,6 +7,7 @@ import androidx.core.content.ContextCompat
 
 class BootCompletedReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {
+        FileLogger.log(context, "BootCompletedReceiver", "onReceive: action=${intent?.action}")
         if (intent?.action != Intent.ACTION_BOOT_COMPLETED) return
 
         val prefs = context.getSharedPreferences("wol_prefs", Context.MODE_PRIVATE)

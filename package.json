@@ -15,9 +15,9 @@
   ],
   "main": "index.js",
   "scripts": {
-    "start": "REACT_NATIVE_PACKAGER_HOSTNAME=192.168.8.6 expo start -c",
+    "start": "REACT_NATIVE_PACKAGER_HOSTNAME=192.168.8.32 expo start -c",
     "start:tunnel": "expo start --tunnel",
-    "android": "REACT_NATIVE_PACKAGER_HOSTNAME=192.168.8.6 expo run:android",
+    "android": "REACT_NATIVE_PACKAGER_HOSTNAME=192.168.8.32 expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
     "build:web": "npm --prefix web run build"

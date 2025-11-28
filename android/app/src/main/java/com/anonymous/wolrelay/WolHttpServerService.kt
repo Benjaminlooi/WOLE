@@ -15,6 +15,7 @@ class WolHttpServerService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        FileLogger.log(applicationContext, "WolHttpServerService", "onCreate")
         startInForeground()
     }
 
@@ -38,11 +39,13 @@ class WolHttpServerService : Service() {
         }.apply()
 
         startServer(port, token)
+        FileLogger.log(applicationContext, "WolHttpServerService", "onStartCommand: started server on port $port")
         return START_STICKY
     }
 
     override fun onDestroy() {
         super.onDestroy()
+        FileLogger.log(applicationContext, "WolHttpServerService", "onDestroy")
         stopServer()
     }
 

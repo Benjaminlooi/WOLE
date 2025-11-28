@@ -12,3 +12,13 @@ export async function stopWolServer() {
   return WolServerModule.stop();
 }
 
+export async function getLogs() {
+  if (Platform.OS !== 'android') return '';
+  return WolServerModule.getLogs();
+}
+
+export async function clearLogs() {
+  if (Platform.OS !== 'android') return;
+  return WolServerModule.clearLogs();
+}
+

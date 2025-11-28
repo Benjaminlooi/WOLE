@@ -23,7 +23,7 @@ import { useFonts, Syne_700Bold, Syne_500Medium } from '@expo-google-fonts/syne'
 import { Manrope_400Regular, Manrope_600SemiBold } from '@expo-google-fonts/manrope';
 import { Ionicons } from '@expo/vector-icons';
 import { tamaguiConfig } from './tamagui.config';
-import { startWolServer, stopWolServer } from './native/WolServerModule';
+import { startWolServer, stopWolServer, getLogs, clearLogs } from './native/WolServerModule';
 
 const statusSubscribers = new Set();
 
@@ -168,6 +168,32 @@ const AppContent = () => {
       });
     });
   }, []);
+
+  const fetchLogs = async () => {
+    try {
+      const logs = await getLogs();
+      // Parse logs or just split by newline
+      const logLines = logs.split('\n').filter(Boolean).reverse();
+      setStatusLog(logLines);
+    } catch (e) {
+      Alert.alert('Error', 'Failed to fetch logs');
+    }
+  };
+
+  const handleClearLogs = async () => {
+    try {
+      await clearLogs();
+      setStatusLog([]);
+    } catch (e) {
+      Alert.alert('Error', 'Failed to clear logs');
+    }
+  };
+
+  useEffect(() => {
+    if (showLogs) {
+      fetchLogs();
+    }
+  }, [showLogs]);
 
   useEffect(() => {
     setIsRunning(false);
@@ -363,7 +389,7 @@ const AppContent = () => {
             <GlassCard style={{ height: '60%', borderBottomLeftRadius: 0, borderBottomRightRadius: 0 }}>
               <XStack justifyContent="space-between" alignItems="center" marginBottom={16}>
                 <SizableText fontFamily="Syne_700Bold" fontSize={20} color="white">System Logs</SizableText>
-                <TouchableOpacity onPress={() => setStatusLog([])}>
+                <TouchableOpacity onPress={handleClearLogs}>
                   <SizableText color="#ef4444" fontFamily="Manrope_600SemiBold">Clear</SizableText>
                 </TouchableOpacity>
               </XStack>
