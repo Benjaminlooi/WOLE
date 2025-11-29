@@ -68,14 +68,14 @@ jobs:
           chmod +x gradlew
           if [ -f "app/release.keystore" ]; then
             ./gradlew assembleRelease \
-              --no-daemon --parallel \
+              --no-daemon --parallel --build-cache \
               -PMYAPP_UPLOAD_STORE_FILE=release.keystore \
               -PMYAPP_UPLOAD_STORE_PASSWORD=$ANDROID_STORE_PASSWORD \
               -PMYAPP_UPLOAD_KEY_ALIAS=$ANDROID_KEY_ALIAS \
               -PMYAPP_UPLOAD_KEY_PASSWORD=$ANDROID_KEY_PASSWORD
           else
             echo "No keystore found, building with debug signing (or default config)"
-            ./gradlew assembleRelease --no-daemon --parallel
+            ./gradlew assembleRelease --no-daemon --parallel --build-cache
           fi
 
       - name: Create Release
