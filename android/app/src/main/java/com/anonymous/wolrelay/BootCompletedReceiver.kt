@@ -12,7 +12,10 @@ class BootCompletedReceiver : BroadcastReceiver() {
 
         val prefs = context.getSharedPreferences("wol_prefs", Context.MODE_PRIVATE)
         val shouldAutostart = prefs.getBoolean("autostart", false)
-        if (!shouldAutostart) return
+        if (!shouldAutostart) {
+            FileLogger.log(context, "BootCompletedReceiver", "Autostart disabled, skipping service start")
+            return
+        }
 
         val port = prefs.getInt("port", 8080)
         val token = prefs.getString("token", null)
@@ -21,7 +24,20 @@ class BootCompletedReceiver : BroadcastReceiver() {
             putExtra(WolHttpServerService.EXTRA_PORT, port)
             putExtra(WolHttpServerService.EXTRA_TOKEN, token)
         }
-        // Start the foreground service on boot
-        ContextCompat.startForegroundService(context, serviceIntent)
+
+        // Use goAsync() to extend the receiver's lifecycle and allow foreground service start
+        val pendingResult = goAsync()
+        
+        try {
+            // Start the foreground service on boot
+            ContextCompat.startForegroundService(context, serviceIntent)
+            FileLogger.log(context, "BootCompletedReceiver", "Successfully started foreground service")
+        } catch (e: Exception) {
+            // On Android 12+, starting foreground services from background may be restricted
+            FileLogger.log(context, "BootCompletedReceiver", "Failed to start service: ${e.message}")
+        } finally {
+            // Finish async work
+            pendingResult.finish()
+        }
     }
 }
