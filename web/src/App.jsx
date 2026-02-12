@@ -427,22 +427,28 @@ function DeviceForm({ initialData, onSave, onCancel }) {
         />
       </div>
       <div className='space-y-2'>
-        <label className='text-sm font-medium text-muted-foreground'>Device IP <span className='text-white/30'>(for status check)</span></label>
+        <label className='text-sm font-medium text-muted-foreground'>Device IP <span className='text-white/30'>(Status Check)</span></label>
         <Input 
-          placeholder='192.168.1.100 (optional)' 
+          placeholder='192.168.1.100' 
           value={pingIp} 
           onChange={e => setPingIp(e.target.value)} 
           className='bg-white/5 border-white/10 focus:border-primary/50 font-mono'
         />
+        <p className='text-[11px] text-muted-foreground/60 leading-relaxed'>
+          The specific IP of your computer. Used to show the <span className='text-emerald-400/80'>Online/Offline</span> dot.
+        </p>
       </div>
       <div className='grid grid-cols-2 gap-4'>
         <div className='space-y-2'>
-          <label className='text-sm font-medium text-muted-foreground'>IP Address</label>
+          <label className='text-sm font-medium text-muted-foreground'>Broadcast IP</label>
           <Input 
             value={ip} 
             onChange={e => setIp(e.target.value)} 
             className='bg-white/5 border-white/10 focus:border-primary/50 font-mono'
           />
+          <p className='text-[10px] text-muted-foreground/50'>
+            Use <span className='font-mono'>255.255.255.255</span> to send the wake signal to the whole network.
+          </p>
         </div>
         <div className='space-y-2'>
           <label className='text-sm font-medium text-muted-foreground'>Port</label>
@@ -452,6 +458,9 @@ function DeviceForm({ initialData, onSave, onCancel }) {
             onChange={e => setPort(e.target.value)} 
             className='bg-white/5 border-white/10 focus:border-primary/50 font-mono'
           />
+          <p className='text-[10px] text-muted-foreground/50'>
+            Usually <span className='font-mono'>9</span> or <span className='font-mono'>7</span>.
+          </p>
         </div>
       </div>
       <div className='flex gap-3 pt-4'>

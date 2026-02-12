@@ -454,17 +454,20 @@ class WolServer(
                       <input name="mac" placeholder="AA:BB:CC:DD:EE:FF" required />
                   </div>
                   <div>
-                      <label>Device IP (for status check)</label><br />
-                      <input name="pingIp" placeholder="192.168.1.100 (optional)" />
+                      <label>Device IP (Status Check)</label><br />
+                      <input name="pingIp" placeholder="192.168.1.100" />
+                      <div class="note">The specific IP of your PC. Used to check if it's Online/Offline.</div>
                   </div>
                   <div class="row">
                       <div>
                           <label>Broadcast IP</label><br />
                           <input name="ip" value="255.255.255.255" />
+                          <div class="note">Usually 255.255.255.255. Sends the wake signal to the network.</div>
                       </div>
                       <div>
                           <label>Port</label><br />
                           <input name="port" type="number" value="9" />
+                          <div class="note">Default is 9.</div>
                       </div>
                   </div>
                   <div class="row">
