@@ -11,6 +11,8 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Locale
 import java.util.UUID
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 class WolServer(
     private val context: Context,
@@ -30,6 +32,7 @@ class WolServer(
                 session.uri == "/api/devices" && session.method == Method.GET -> listDevices(session)
                 session.uri == "/api/devices" && session.method == Method.POST -> upsertDevice(session)
                 session.uri.startsWith("/api/devices/") && session.method == Method.DELETE -> deleteDevice(session)
+                session.uri == "/api/ping" && session.method == Method.POST -> handlePing(session)
                 else -> serveStaticOrIndex(session)
             }
         } catch (e: Exception) {
@@ -207,6 +210,7 @@ class WolServer(
         val mac = json.optString("mac")
         val ip = json.optString("ip", "255.255.255.255")
         val port = json.optInt("port", 9)
+        val pingIp = json.optString("pingIp", "")
         if (name.isBlank() || mac.isBlank()) return badRequest("Missing name/mac")
 
         val arr = loadDevices()
@@ -218,6 +222,7 @@ class WolServer(
                 obj.put("mac", mac)
                 obj.put("ip", ip)
                 obj.put("port", port)
+                obj.put("pingIp", pingIp)
                 updated = true
                 break
             }
@@ -229,6 +234,7 @@ class WolServer(
             obj.put("mac", mac)
             obj.put("ip", ip)
             obj.put("port", port)
+            obj.put("pingIp", pingIp)
             arr.put(obj)
         }
         saveDevices(arr)
@@ -264,6 +270,67 @@ class WolServer(
             val address = InetAddress.getByName(broadcastIp)
             val dp = DatagramPacket(packet, packet.size, address, port)
             socket.send(dp)
+        }
+    }
+
+    private fun handlePing(session: IHTTPSession): Response {
+        if (!isAuthorized(session)) return unauthorized()
+        val files = mutableMapOf<String, String>()
+        return try {
+            session.parseBody(files)
+            val body = files["postData"] ?: return badRequest("Missing body")
+            val json = JSONObject(body)
+
+            // Accept either { "ip": "..." } or { "ips": ["...", ...] }
+            val ips = mutableListOf<String>()
+            if (json.has("ip")) {
+                json.optString("ip").trim().takeIf { it.isNotEmpty() }?.let { ips.add(it) }
+            }
+            if (json.has("ips")) {
+                val arr = json.optJSONArray("ips")
+                if (arr != null) {
+                    for (i in 0 until arr.length()) {
+                        arr.optString(i).trim().takeIf { it.isNotEmpty() }?.let { ips.add(it) }
+                    }
+                }
+            }
+            if (ips.isEmpty()) return badRequest("Missing ip or ips")
+
+            // Ping all IPs concurrently
+            val results = JSONObject()
+            val executor = Executors.newFixedThreadPool(ips.size.coerceAtMost(8))
+            val futures = ips.map { ip ->
+                executor.submit<Pair<String, Boolean>> {
+                    ip to pingHost(ip)
+                }
+            }
+            for (future in futures) {
+                try {
+                    val (ip, reachable) = future.get(5, TimeUnit.SECONDS)
+                    results.put(ip, reachable)
+                } catch (_: Exception) {
+                    // Timeout or error — mark as unreachable
+                }
+            }
+            executor.shutdown()
+
+            newJsonResponse(Response.Status.OK, JSONObject().put("results", results))
+        } catch (e: Exception) {
+            badRequest("Invalid request: ${e.message}")
+        }
+    }
+
+    private fun pingHost(ip: String): Boolean {
+        return try {
+            // Sanitize: only allow IP-like characters to prevent command injection
+            val sanitized = ip.replace(Regex("[^0-9a-fA-F.:]"), "")
+            if (sanitized.isEmpty()) return false
+
+            val process = Runtime.getRuntime().exec(arrayOf("ping", "-c", "1", "-W", "1", sanitized))
+            val exited = process.waitFor()
+            exited == 0
+        } catch (_: Exception) {
+            false
         }
     }
 
@@ -347,6 +414,10 @@ class WolServer(
                 table { border-collapse: collapse; width: 100%; }
                 th, td { text-align: left; padding: 0.4rem; border-bottom: 1px solid #eee; }
                 .actions button { margin-right: .4rem }
+                .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
+                .dot-online { background: #22c55e; }
+                .dot-offline { background: #ef4444; }
+                .dot-unknown { background: #ccc; }
             </style>
         </head>
         <body>
@@ -365,7 +436,7 @@ class WolServer(
             <div class="card">
               <h3>Devices</h3>
               <table id="devicetable">
-                <thead><tr><th>Name</th><th>MAC</th><th>IP</th><th>Port</th><th class="actions">Actions</th></tr></thead>
+                <thead><tr><th>Name</th><th>MAC</th><th>IP</th><th>Port</th><th>Status</th><th class="actions">Actions</th></tr></thead>
                 <tbody id="devices"></tbody>
               </table>
             </div>
@@ -381,6 +452,10 @@ class WolServer(
                   <div>
                       <label>MAC Address</label><br />
                       <input name="mac" placeholder="AA:BB:CC:DD:EE:FF" required />
+                  </div>
+                  <div>
+                      <label>Device IP (for status check)</label><br />
+                      <input name="pingIp" placeholder="192.168.1.100 (optional)" />
                   </div>
                   <div class="row">
                       <div>
@@ -425,17 +500,27 @@ class WolServer(
 
               async function refreshDevices() {
                 const tbody = document.getElementById('devices');
-                tbody.innerHTML = '<tr><td colspan="5">Loading…</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="6">Loading…</td></tr>';
                 try {
                   const list = await api('/api/devices');
                   tbody.innerHTML = '';
                   if (!Array.isArray(list) || list.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="5">No devices yet</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="6">No devices yet</td></tr>';
                     return;
+                  }
+                  // Collect pingIps for status check
+                  const pingIps = list.map(d => d.pingIp).filter(Boolean);
+                  let statuses = {};
+                  if (pingIps.length > 0) {
+                    try {
+                      const pingRes = await api('/api/ping', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ips: pingIps }) });
+                      statuses = pingRes.results || {};
+                    } catch (_) {}
                   }
                   for (const d of list) {
                     const tr = document.createElement('tr');
-                    tr.innerHTML = `<td>${'$'}{d.name||''}</td><td>${'$'}{d.mac||''}</td><td>${'$'}{d.ip||''}</td><td>${'$'}{d.port||9}</td>`;
+                    const statusDot = d.pingIp ? (statuses[d.pingIp] ? '<span class="dot dot-online"></span>Online' : '<span class="dot dot-offline"></span>Offline') : '<span class="dot dot-unknown"></span>—';
+                    tr.innerHTML = `<td>${'$'}{d.name||''}</td><td>${'$'}{d.mac||''}</td><td>${'$'}{d.ip||''}</td><td>${'$'}{d.port||9}</td><td>${'$'}{statusDot}</td>`;
                     const tdActions = document.createElement('td');
                     tdActions.className='actions';
                     const wakeBtn = document.createElement('button');
@@ -452,7 +537,7 @@ class WolServer(
                     tbody.appendChild(tr);
                   }
                 } catch (err) {
-                  tbody.innerHTML = `<tr><td colspan="5">Error: ${'$'}{err.message}</td></tr>`;
+                  tbody.innerHTML = `<tr><td colspan="6">Error: ${'$'}{err.message}</td></tr>`;
                 }
               }
 
@@ -463,19 +548,20 @@ class WolServer(
                 f.mac.value = d.mac||'';
                 f.ip.value = d.ip||'255.255.255.255';
                 f.port.value = d.port||9;
+                f.pingIp.value = d.pingIp||'';
               }
 
               function resetForm() {
                 const f = document.forms[0];
                 f.id.value = '';
-                f.name.value=''; f.mac.value=''; f.ip.value='255.255.255.255'; f.port.value=9;
+                f.name.value=''; f.mac.value=''; f.ip.value='255.255.255.255'; f.port.value=9; f.pingIp.value='';
                 document.getElementById('formResult').textContent='';
               }
 
               async function saveDevice(e) {
                 e.preventDefault();
                 const f = e.target;
-                const payload = { id: f.id.value, name: f.name.value, mac: f.mac.value, ip: f.ip.value, port: Number(f.port.value)||9 };
+                const payload = { id: f.id.value, name: f.name.value, mac: f.mac.value, ip: f.ip.value, port: Number(f.port.value)||9, pingIp: (f.pingIp.value||'').trim() };
                 try {
                   await api('/api/devices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
                   document.getElementById('formResult').textContent = 'Saved';

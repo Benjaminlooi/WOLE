@@ -115,9 +115,12 @@ curl -X POST "http://<phone-ip-or-vpn-ip>:<port>/wol" \
 - `GET /api/devices`
   - Returns JSON array of saved devices: `{ id, name, mac, ip, port }[]`.
 - `POST /api/devices`
-  - JSON body: `{ id?, name, mac, ip="255.255.255.255", port=9 }`. Creates or updates a device. Returns `{ id }`.
+  - JSON body: `{ id?, name, mac, ip="255.255.255.255", port=9, pingIp="" }`. Creates or updates a device. Returns `{ id }`. `pingIp` is the device's actual IP for status checks (optional).
 - `DELETE /api/devices/:id`
   - Deletes a saved device. Returns `{ ok: true }`.
+- `POST /api/ping`
+  - JSON body: `{ "ip": "192.168.1.100" }` or `{ "ips": ["192.168.1.100", "192.168.1.101"] }` for batch.
+  - Returns `{ "results": { "192.168.1.100": true, "192.168.1.101": false } }`. Uses ICMP ping with 1-second timeout.
 - `GET /api/dev-proxy`
   - Returns `{ enabled, url }` for dev proxy config.
 - `POST /api/dev-proxy`

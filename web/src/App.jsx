@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Settings, Plus, Power, Trash2, Edit2, X, Monitor, Wifi } from 'lucide-react'
+import { Settings, Plus, Power, Trash2, Edit2, X, Monitor, Wifi, RefreshCw } from 'lucide-react'
 import { Button } from './components/ui/button'
 import { Input } from './components/ui/input'
 import { clsx } from 'clsx'
@@ -35,6 +35,8 @@ async function api(path, opts = {}) {
   return res.json()
 }
 
+const PING_INTERVAL_MS = 30_000
+
 export default function App() {
   const [token, setToken] = useToken()
   const [devices, setDevices] = useState([])
@@ -43,8 +45,12 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false)
   const [showAddDevice, setShowAddDevice] = useState(false)
   const [editingDevice, setEditingDevice] = useState(null)
+  const [statuses, setStatuses] = useState({}) // { ip: true/false }
+  const [pinging, setPinging] = useState(false)
 
   const headers = useMemo(() => ({ 'Content-Type': 'application/json' }), [])
+  const devicesRef = useRef(devices)
+  devicesRef.current = devices
 
   async function load() {
     setLoading(true); setError('')
@@ -58,7 +64,34 @@ export default function App() {
     }
   }
 
+  const pingDevices = useCallback(async (deviceList) => {
+    const list = deviceList || devicesRef.current
+    const ips = list.map(d => d.pingIp).filter(Boolean)
+    if (ips.length === 0) return
+    setPinging(true)
+    try {
+      const data = await api('/api/ping', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ips })
+      })
+      if (data.results) setStatuses(data.results)
+    } catch {
+      // Silently fail — status just stays stale
+    } finally {
+      setPinging(false)
+    }
+  }, [])
+
   useEffect(() => { load() }, [])
+
+  // Ping on first load and periodically
+  useEffect(() => {
+    if (devices.length === 0) return
+    pingDevices(devices)
+    const id = setInterval(() => pingDevices(), PING_INTERVAL_MS)
+    return () => clearInterval(id)
+  }, [devices, pingDevices])
 
   async function saveDevice(d) {
     await api('/api/devices', { method: 'POST', headers, body: JSON.stringify(d) })
@@ -110,14 +143,26 @@ export default function App() {
             </h1>
             <p className='text-muted-foreground mt-1 font-sans text-lg'>Wake On LAN Relay</p>
           </div>
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            className="rounded-full hover:bg-white/10 text-white/80 hover:text-white transition-colors"
-            onClick={() => setShowSettings(true)}
-          >
-            <Settings className="w-6 h-6" />
-          </Button>
+          <div className='flex items-center gap-2'>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="rounded-full hover:bg-white/10 text-white/80 hover:text-white transition-colors"
+              onClick={() => pingDevices()}
+              disabled={pinging}
+              title="Refresh device statuses"
+            >
+              <RefreshCw className={cn("w-5 h-5", pinging && "animate-spin")} />
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="rounded-full hover:bg-white/10 text-white/80 hover:text-white transition-colors"
+              onClick={() => setShowSettings(true)}
+            >
+              <Settings className="w-6 h-6" />
+            </Button>
+          </div>
         </motion.header>
 
         <main>
@@ -148,7 +193,8 @@ export default function App() {
                 {devices.map((d) => (
                   <DeviceCard 
                     key={d.id} 
-                    device={d} 
+                    device={d}
+                    status={d.pingIp ? statuses[d.pingIp] : undefined}
                     onWake={() => wake(d)} 
                     onEdit={() => { setEditingDevice(d); setShowAddDevice(true) }}
                     onDelete={() => del(d.id)}
@@ -213,7 +259,26 @@ export default function App() {
   )
 }
 
-function DeviceCard({ device, onWake, onEdit, onDelete }) {
+function StatusDot({ status }) {
+  // status: true = online, false = offline, undefined = unknown
+  const color = status === true
+    ? 'bg-emerald-400 shadow-emerald-400/50'
+    : status === false
+      ? 'bg-red-400 shadow-red-400/50'
+      : 'bg-white/20'
+  const label = status === true ? 'Online' : status === false ? 'Offline' : 'Unknown'
+
+  return (
+    <span className='relative flex h-3 w-3' title={label}>
+      {status === true && (
+        <span className='animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75' />
+      )}
+      <span className={cn('relative inline-flex rounded-full h-3 w-3 shadow-sm', color)} />
+    </span>
+  )
+}
+
+function DeviceCard({ device, status, onWake, onEdit, onDelete }) {
   const [waking, setWaking] = useState(false)
 
   const handleWake = async () => {
@@ -243,17 +308,26 @@ function DeviceCard({ device, onWake, onEdit, onDelete }) {
         <div className='p-3 rounded-xl bg-primary/10 text-primary'>
           <Monitor className='w-6 h-6' />
         </div>
-        <div>
-          <h3 className='font-bold text-lg leading-tight text-white'>{device.name}</h3>
+        <div className='flex-1 min-w-0'>
+          <div className='flex items-center gap-2'>
+            <h3 className='font-bold text-lg leading-tight text-white'>{device.name}</h3>
+            {device.pingIp && <StatusDot status={status} />}
+          </div>
           <p className='text-xs font-mono text-muted-foreground mt-1'>{device.mac}</p>
         </div>
       </div>
 
       <div className='space-y-2 mb-6'>
         <div className='flex items-center justify-between text-sm'>
-          <span className='text-muted-foreground'>IP Address</span>
-          <span className='font-mono text-white/80'>{device.ip || 'Broadcast'}</span>
+          <span className='text-muted-foreground'>Broadcast IP</span>
+          <span className='font-mono text-white/80'>{device.ip || '255.255.255.255'}</span>
         </div>
+        {device.pingIp && (
+          <div className='flex items-center justify-between text-sm'>
+            <span className='text-muted-foreground'>Device IP</span>
+            <span className='font-mono text-white/80'>{device.pingIp}</span>
+          </div>
+        )}
         <div className='flex items-center justify-between text-sm'>
           <span className='text-muted-foreground'>Port</span>
           <span className='font-mono text-white/80'>{device.port}</span>
@@ -316,13 +390,14 @@ function DeviceForm({ initialData, onSave, onCancel }) {
   const [mac, setMac] = useState(initialData?.mac || '')
   const [ip, setIp] = useState(initialData?.ip || '255.255.255.255')
   const [port, setPort] = useState(initialData?.port || 9)
+  const [pingIp, setPingIp] = useState(initialData?.pingIp || '')
   const [saving, setSaving] = useState(false)
 
   async function submit(e) {
     e.preventDefault()
     setSaving(true)
     try {
-      await onSave({ ...initialData, name, mac, ip, port: Number(port) || 9 })
+      await onSave({ ...initialData, name, mac, ip, port: Number(port) || 9, pingIp: pingIp.trim() })
     } catch (e) {
       alert(e.message)
       setSaving(false)
@@ -348,6 +423,15 @@ function DeviceForm({ initialData, onSave, onCancel }) {
           placeholder='AA:BB:CC:DD:EE:FF' 
           value={mac} 
           onChange={e => setMac(e.target.value)} 
+          className='bg-white/5 border-white/10 focus:border-primary/50 font-mono'
+        />
+      </div>
+      <div className='space-y-2'>
+        <label className='text-sm font-medium text-muted-foreground'>Device IP <span className='text-white/30'>(for status check)</span></label>
+        <Input 
+          placeholder='192.168.1.100 (optional)' 
+          value={pingIp} 
+          onChange={e => setPingIp(e.target.value)} 
           className='bg-white/5 border-white/10 focus:border-primary/50 font-mono'
         />
       </div>
