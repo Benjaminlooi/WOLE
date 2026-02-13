@@ -71,7 +71,7 @@ jobs:
       - name: Decode Keystore
         if: env.ANDROID_KEYSTORE_BASE64 != ''
         run: |
-          echo $ANDROID_KEYSTORE_BASE64 | base64 --decode > android/app/release.keystore
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode --ignore-garbage > android/app/release.keystore
 
       - name: Generate Debug Keystore
         run: |
