@@ -33,7 +33,8 @@
         "notificationText": "Listening for Wake-on-LAN requests.",
         "notificationIcon": "./assets/adaptive-icon.png"
       },
-      "package": "com.anonymous.wolrelay"
+      "package": "com.anonymous.wolrelay",
+      "versionCode": 1
     },
     "web": {
       "favicon": "./assets/favicon.png"

@@ -39,6 +39,24 @@ jobs:
       - name: Install Web Dependencies
         run: cd web && npm install
 
+      - name: Set Version
+        run: |
+          VERSION_NAME=${GITHUB_REF#refs/tags/v}
+          # If it's not a tag push, use the version from app.json as fallback
+          if [[ $GITHUB_REF != refs/tags/* ]]; then
+            VERSION_NAME=$(jq -r '.expo.version' app.json)
+          fi
+          VERSION_CODE=$GITHUB_RUN_NUMBER
+          echo "Setting version to $VERSION_NAME ($VERSION_CODE)"
+          jq ".expo.version = \"$VERSION_NAME\" | .expo.android.versionCode = $VERSION_CODE" app.json > app.json.tmp && mv app.json.tmp app.json
+
+      - name: Check Signing Config
+        run: |
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "::error::ANDROID_KEYSTORE_BASE64 is missing! The APK will be signed with a temporary key and updates will fail."
+            echo "Please set up ANDROID_KEYSTORE_BASE64, AND_KEY_ALIAS, AND_KEY_PASSWORD, and AND_STORE_PASSWORD in GitHub Secrets."
+          fi
+
       - name: Expo Prebuild
         run: npx expo prebuild -p android
 
