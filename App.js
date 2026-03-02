@@ -23,7 +23,7 @@ import { useFonts, Syne_700Bold, Syne_500Medium } from '@expo-google-fonts/syne'
 import { Manrope_400Regular, Manrope_600SemiBold } from '@expo-google-fonts/manrope';
 import { Ionicons } from '@expo/vector-icons';
 import { tamaguiConfig } from './tamagui.config';
-import { startWolServer, stopWolServer, getLogs, clearLogs } from './native/WolServerModule';
+import { startWolServer, stopWolServer, getLogs, clearLogs, isIgnoringBatteryOptimizations, requestIgnoreBatteryOptimizations } from './native/WolServerModule';
 
 const statusSubscribers = new Set();
 
@@ -370,12 +370,23 @@ const AppContent = () => {
                 </YStack>
 
                 <Button
-                  onPress={() => { Linking.openSettings(); }}
+                  onPress={async () => {
+                    try {
+                      const isIgnoring = await isIgnoringBatteryOptimizations();
+                      if (isIgnoring) {
+                        Alert.alert('Already Optimized', 'Battery optimization is already disabled for WOLE. The service will run reliably in the background.');
+                      } else {
+                        await requestIgnoreBatteryOptimizations();
+                      }
+                    } catch (e) {
+                      Linking.openSettings();
+                    }
+                  }}
                   backgroundColor="rgba(255,255,255,0.1)"
                   color="white"
                   icon={<Ionicons name="battery-charging-outline" size={18} color="white" />}
                 >
-                  Battery Optimization Settings
+                  Disable Battery Optimization
                 </Button>
               </YStack>
             </GlassCard>

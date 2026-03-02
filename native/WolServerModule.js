@@ -12,6 +12,16 @@ export async function stopWolServer() {
   return WolServerModule.stop();
 }
 
+export async function isIgnoringBatteryOptimizations() {
+  if (Platform.OS !== 'android') return true;
+  return WolServerModule.isIgnoringBatteryOptimizations();
+}
+
+export async function requestIgnoreBatteryOptimizations() {
+  if (Platform.OS !== 'android') return;
+  return WolServerModule.requestIgnoreBatteryOptimizations();
+}
+
 export async function getLogs() {
   if (Platform.OS !== 'android') return '';
   return WolServerModule.getLogs();

@@ -2,6 +2,9 @@ package com.anonymous.wolrelay
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
+import android.os.PowerManager
+import android.provider.Settings
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
@@ -44,6 +47,31 @@ class WolModule(private val reactContext: ReactApplicationContext) : ReactContex
             promise.resolve(true)
         } catch (e: Exception) {
             promise.reject("STOP_ERROR", e)
+        }
+    }
+
+    @ReactMethod
+    fun isIgnoringBatteryOptimizations(promise: Promise) {
+        try {
+            val pm = reactContext.getSystemService(Context.POWER_SERVICE) as PowerManager
+            val packageName = reactContext.packageName
+            promise.resolve(pm.isIgnoringBatteryOptimizations(packageName))
+        } catch (e: Exception) {
+            promise.reject("BATTERY_CHECK_ERROR", e)
+        }
+    }
+
+    @ReactMethod
+    fun requestIgnoreBatteryOptimizations(promise: Promise) {
+        try {
+            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                data = Uri.parse("package:${reactContext.packageName}")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            reactContext.startActivity(intent)
+            promise.resolve(true)
+        } catch (e: Exception) {
+            promise.reject("BATTERY_REQUEST_ERROR", e)
         }
     }
 

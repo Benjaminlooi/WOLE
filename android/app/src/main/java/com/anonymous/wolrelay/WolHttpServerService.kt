@@ -6,21 +6,30 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 
 class WolHttpServerService : Service() {
     private var server: WolServer? = null
+    private var wakeLock: PowerManager.WakeLock? = null
 
     override fun onCreate() {
         super.onCreate()
         FileLogger.log(applicationContext, "WolHttpServerService", "onCreate")
+        acquireWakeLock()
         startInForeground()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val prefs = getSharedPreferences("wol_prefs", MODE_PRIVATE)
+
+        val isSystemRestart = intent == null
+        if (isSystemRestart) {
+            FileLogger.log(applicationContext, "WolHttpServerService", "onStartCommand: system restart (START_STICKY)")
+        }
 
         var port = intent?.getIntExtra(EXTRA_PORT, -1) ?: -1
         var token = intent?.getStringExtra(EXTRA_TOKEN)
@@ -44,9 +53,22 @@ class WolHttpServerService : Service() {
     }
 
     override fun onDestroy() {
-        super.onDestroy()
         FileLogger.log(applicationContext, "WolHttpServerService", "onDestroy")
         stopServer()
+        releaseWakeLock()
+        super.onDestroy()
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        FileLogger.log(applicationContext, "WolHttpServerService", "onTaskRemoved: restarting service")
+        // Re-start ourselves so the service survives swipe-away
+        val restartIntent = Intent(applicationContext, WolHttpServerService::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            applicationContext.startForegroundService(restartIntent)
+        } else {
+            applicationContext.startService(restartIntent)
+        }
+        super.onTaskRemoved(rootIntent)
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -61,6 +83,25 @@ class WolHttpServerService : Service() {
     private fun stopServer() {
         server?.stop()
         server = null
+    }
+
+    private fun acquireWakeLock() {
+        if (wakeLock == null) {
+            val pm = getSystemService(POWER_SERVICE) as PowerManager
+            wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "WOLE::WolServerLock")
+            wakeLock?.acquire()
+            FileLogger.log(applicationContext, "WolHttpServerService", "Wake lock acquired")
+        }
+    }
+
+    private fun releaseWakeLock() {
+        wakeLock?.let {
+            if (it.isHeld) {
+                it.release()
+                FileLogger.log(applicationContext, "WolHttpServerService", "Wake lock released")
+            }
+        }
+        wakeLock = null
     }
 
     private fun startInForeground() {
@@ -84,7 +125,12 @@ class WolHttpServerService : Service() {
             .setOngoing(true)
             .build()
 
-        startForeground(NOTIFICATION_ID, notification)
+        // Android 14+ (API 34) requires foregroundServiceType in startForeground()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
+        }
     }
 
     companion object {
