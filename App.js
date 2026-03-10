@@ -23,7 +23,15 @@ import { useFonts, Syne_700Bold, Syne_500Medium } from '@expo-google-fonts/syne'
 import { Manrope_400Regular, Manrope_600SemiBold } from '@expo-google-fonts/manrope';
 import { Ionicons } from '@expo/vector-icons';
 import { tamaguiConfig } from './tamagui.config';
-import { startWolServer, stopWolServer, getLogs, clearLogs, isIgnoringBatteryOptimizations, requestIgnoreBatteryOptimizations } from './native/WolServerModule';
+import {
+  startWolServer,
+  stopWolServer,
+  getLogs,
+  clearLogs,
+  isIgnoringBatteryOptimizations,
+  requestIgnoreBatteryOptimizations,
+  getAutoStartConfig,
+} from "./native/WolServerModule";
 
 const statusSubscribers = new Set();
 
@@ -197,8 +205,19 @@ const AppContent = () => {
 
   useEffect(() => {
     setIsRunning(false);
-    startRelay();
-  }, []);
+
+    // Only auto-start if previously running. This avoids requesting POST_NOTIFICATIONS
+    // on first install before the user interacts with the app.
+    getAutoStartConfig().then((config) => {
+      if (config && config.autostart) {
+        if (config.port) setListenPort(config.port.toString());
+        if (config.token) setSharedSecret(config.token);
+        // The useCallback of startRelay depends on state, so we call startRelay directly
+        // with the config to ensure it uses the latest values from SharedPreferences
+        startRelayWithConfig(config.port, config.token);
+      }
+    });
+  };, []);
 
   const ensureForegroundServiceReady = useCallback(async () => {
     if (Platform.OS !== 'android') return true;
@@ -219,26 +238,38 @@ const AppContent = () => {
     return true;
   }, []);
 
-  const startRelay = useCallback(async () => {
-    const portNumber = Number(listenPort);
-    if (Number.isNaN(portNumber) || portNumber <= 0 || portNumber > 65535) {
-      Alert.alert('Invalid port', 'Please enter a TCP port between 1 and 65535.');
-      return;
-    }
-    if (isRunning) return;
+  const startRelayWithConfig = useCallback(
+    async (customPort, customToken) => {
+      const portNumber = Number(customPort ?? listenPort);
+      const token = customToken ?? sharedSecret;
 
-    const ok = await ensureForegroundServiceReady();
-    if (!ok) return;
+      if (Number.isNaN(portNumber) || portNumber <= 0 || portNumber > 65535) {
+        Alert.alert(
+          "Invalid port",
+          "Please enter a TCP port between 1 and 65535.",
+        );
+        return;
+      }
+      if (isRunning) return;
 
-    try {
-      await startWolServer({ port: portNumber, token: sharedSecret || null });
-      logStatus(`Wake relay listening on port ${portNumber}`);
-      setIsRunning(true);
-      setActivePort(portNumber);
-    } catch (error) {
-      Alert.alert('Failed to start relay', error.message);
-    }
-  }, [listenPort, sharedSecret, ensureForegroundServiceReady, isRunning]);
+      const ok = await ensureForegroundServiceReady();
+      if (!ok) return;
+
+      try {
+        await startWolServer({ port: portNumber, token: token || null });
+        logStatus(`Wake relay listening on port ${portNumber}`);
+        setIsRunning(true);
+        setActivePort(portNumber);
+      } catch (error) {
+        Alert.alert("Failed to start relay", error.message);
+      }
+    },
+    [listenPort, sharedSecret, ensureForegroundServiceReady, isRunning],
+  );
+
+  const startRelay = useCallback(() => {
+    return startRelayWithConfig();
+  }, [startRelayWithConfig]);
 
   const stopRelay = useCallback(async () => {
     if (!isRunning) return;

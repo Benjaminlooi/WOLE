@@ -94,4 +94,24 @@ class WolModule(private val reactContext: ReactApplicationContext) : ReactContex
             promise.reject("CLEAR_LOGS_ERROR", e)
         }
     }
+
+    @ReactMethod
+    fun getAutoStartConfig(promise: Promise) {
+        try {
+            val prefs = reactContext.getSharedPreferences("wol_prefs", Context.MODE_PRIVATE)
+            val autostart = prefs.getBoolean("autostart", false)
+            val port = prefs.getInt("port", 8080)
+            val token = prefs.getString("token", null)
+
+            val map = com.facebook.react.bridge.Arguments.createMap()
+            map.putBoolean("autostart", autostart)
+            map.putInt("port", port)
+            if (token != null) {
+                map.putString("token", token)
+            }
+            promise.resolve(map)
+        } catch (e: Exception) {
+            promise.reject("GET_CONFIG_ERROR", e)
+        }
+    }
 }

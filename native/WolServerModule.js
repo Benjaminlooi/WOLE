@@ -32,3 +32,9 @@ export async function clearLogs() {
   return WolServerModule.clearLogs();
 }
 
+export async function getAutoStartConfig() {
+  if (Platform.OS !== "android")
+    return { autostart: false, port: 8080, token: null };
+  return WolServerModule.getAutoStartConfig();
+}
+
