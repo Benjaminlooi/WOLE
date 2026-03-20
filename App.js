@@ -217,7 +217,7 @@ const AppContent = () => {
         startRelayWithConfig(config.port, config.token);
       }
     });
-  };, []);
+  }, []);
 
   const ensureForegroundServiceReady = useCallback(async () => {
     if (Platform.OS !== 'android') return true;
