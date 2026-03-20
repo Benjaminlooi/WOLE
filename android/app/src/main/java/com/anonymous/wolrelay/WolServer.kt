@@ -22,20 +22,47 @@ class WolServer(
 
     private val prefs by lazy { context.getSharedPreferences("wol_prefs", Context.MODE_PRIVATE) }
 
+    override fun start() {
+        try {
+            super.start()
+            FileLogger.log(context, TAG, "NanoHTTPD server started on port $listeningPort")
+        } catch (e: Exception) {
+            FileLogger.logError(context, TAG, "NanoHTTPD failed to start on port $listeningPort", e)
+            throw e
+        }
+    }
+
+    override fun stop() {
+        try {
+            super.stop()
+            FileLogger.log(context, TAG, "NanoHTTPD server stopped")
+        } catch (e: Exception) {
+            FileLogger.logError(context, TAG, "Error stopping NanoHTTPD server", e)
+        }
+    }
+
     override fun serve(session: IHTTPSession): Response {
+        // Log non-static requests (skip asset requests to reduce noise)
+        val uri = session.uri
+        if (uri == "/wol" || uri == "/health" || uri.startsWith("/api/")) {
+            val clientIp = session.remoteIpAddress ?: "unknown"
+            FileLogger.log(context, TAG, "→ ${session.method} $uri from $clientIp")
+        }
+
         return try {
             when {
-                session.uri == "/wol" -> handleWol(session)
-                session.uri == "/health" -> newFixedLengthResponse("ok")
-                session.uri == "/api/dev-proxy" && session.method == Method.GET -> getDevProxyConfig(session)
-                session.uri == "/api/dev-proxy" && session.method == Method.POST -> setDevProxyConfig(session)
-                session.uri == "/api/devices" && session.method == Method.GET -> listDevices(session)
-                session.uri == "/api/devices" && session.method == Method.POST -> upsertDevice(session)
-                session.uri.startsWith("/api/devices/") && session.method == Method.DELETE -> deleteDevice(session)
-                session.uri == "/api/ping" && session.method == Method.POST -> handlePing(session)
+                uri == "/wol" -> handleWol(session)
+                uri == "/health" -> newFixedLengthResponse("ok")
+                uri == "/api/dev-proxy" && session.method == Method.GET -> getDevProxyConfig(session)
+                uri == "/api/dev-proxy" && session.method == Method.POST -> setDevProxyConfig(session)
+                uri == "/api/devices" && session.method == Method.GET -> listDevices(session)
+                uri == "/api/devices" && session.method == Method.POST -> upsertDevice(session)
+                uri.startsWith("/api/devices/") && session.method == Method.DELETE -> deleteDevice(session)
+                uri == "/api/ping" && session.method == Method.POST -> handlePing(session)
                 else -> serveStaticOrIndex(session)
             }
         } catch (e: Exception) {
+            FileLogger.logError(context, TAG, "Unhandled exception serving ${session.method} $uri", e)
             newJsonResponse(Response.Status.INTERNAL_ERROR, jsonError(e.message ?: "error"))
         }
     }
@@ -607,6 +634,10 @@ class WolServer(
         </body>
         </html>
     """.trimIndent()
+
+    companion object {
+        private const val TAG = "WolServer"
+    }
 }
 
 private inline fun String?.ifNullOrBlank(defaultValue: () -> String): String {

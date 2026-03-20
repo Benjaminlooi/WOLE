@@ -26,7 +26,8 @@
         "INTERNET",
         "FOREGROUND_SERVICE",
         "POST_NOTIFICATIONS",
-        "WAKE_LOCK"
+        "WAKE_LOCK",
+        "SCHEDULE_EXACT_ALARM"
       ],
       "foregroundService": {
         "notificationTitle": "WOL Relay Running",
