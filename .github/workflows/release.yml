@@ -105,3 +105,4 @@ jobs:
             web-build.zip
           draft: false
           prerelease: false
+          generate_release_notes: true
