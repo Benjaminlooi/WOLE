@@ -25,6 +25,7 @@
       "permissions": [
         "INTERNET",
         "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_CONNECTED_DEVICE",
         "POST_NOTIFICATIONS",
         "WAKE_LOCK",
         "SCHEDULE_EXACT_ALARM"

@@ -42,15 +42,6 @@ class WolHttpServerService : Service() {
     }
     private var serviceStartElapsed = 0L
 
-    // Self-restart interval: reset the dataSync 6-hour timer on Android 15+
-    // Restart every 5 hours to stay well within the 6-hour limit
-    private val selfRestartIntervalMs = 5L * 60 * 60 * 1000
-    private val selfRestartRunnable = Runnable {
-        FileLogger.log(applicationContext, TAG,
-            "⏰ Scheduled self-restart to reset dataSync timer (5h elapsed)")
-        performSelfRestart()
-    }
-
     override fun onCreate() {
         super.onCreate()
         serviceStartElapsed = SystemClock.elapsedRealtime()
@@ -59,7 +50,6 @@ class WolHttpServerService : Service() {
         acquireWakeLock()
         startInForeground()
         startHeartbeat()
-        scheduleSelfRestart()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -110,6 +100,17 @@ class WolHttpServerService : Service() {
         FileLogger.log(applicationContext, TAG, "onTaskRemoved: app swiped away, restarting service")
         performSelfRestart()
         super.onTaskRemoved(rootIntent)
+    }
+
+    /**
+     * Safety net for Android 15+ (API 35): if the system ever sends a timeout signal
+     * (e.g. if the foregroundServiceType rules change in a future update),
+     * gracefully self-restart instead of letting the system crash the app.
+     */
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        FileLogger.logWarning(applicationContext, TAG,
+            "⚠ onTimeout received (startId=$startId, fgsType=$fgsType) — performing self-restart")
+        performSelfRestart()
     }
 
     override fun onTrimMemory(level: Int) {
@@ -204,19 +205,6 @@ class WolHttpServerService : Service() {
 
     private fun stopHeartbeat() {
         handler.removeCallbacks(heartbeatRunnable)
-        handler.removeCallbacks(selfRestartRunnable)
-    }
-
-    /**
-     * Schedule a self-restart to beat the Android 15 dataSync 6-hour timeout.
-     * The service restarts itself every 5 hours, resetting the timer.
-     */
-    private fun scheduleSelfRestart() {
-        if (Build.VERSION.SDK_INT >= 35) {  // Android 15+
-            FileLogger.log(applicationContext, TAG,
-                "Android 15+ detected — scheduling self-restart in 5 hours to reset dataSync timer")
-            handler.postDelayed(selfRestartRunnable, selfRestartIntervalMs)
-        }
     }
 
     /**
@@ -294,7 +282,9 @@ class WolHttpServerService : Service() {
         val channelId = "wol_server_channel"
         val nm = getSystemService(NotificationManager::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(channelId, "WOL Server", NotificationManager.IMPORTANCE_MIN)
+            // IMPORTANCE_LOW: silent but visible in status bar — signals to OS this service matters
+            val channel = NotificationChannel(channelId, "WOL Server", NotificationManager.IMPORTANCE_LOW)
+            channel.description = "Keeps the Wake-on-LAN relay running in the background"
             nm.createNotificationChannel(channel)
         }
 
@@ -306,14 +296,16 @@ class WolHttpServerService : Service() {
         val notification: Notification = NotificationCompat.Builder(this, channelId)
             .setSmallIcon(android.R.drawable.stat_sys_upload)
             .setContentTitle(getString(R.string.app_name))
-            .setContentText("WOL server running")
+            .setContentText("WOL relay running")
             .setContentIntent(pendingIntent)
             .setOngoing(true)
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .build()
 
         // Android 14+ (API 34) requires foregroundServiceType in startForeground()
+        // Use CONNECTED_DEVICE type — no timeout limit (unlike dataSync which has 6h limit on API 35+)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
         } else {
             startForeground(NOTIFICATION_ID, notification)
         }
