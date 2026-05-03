@@ -104,12 +104,12 @@ class WolHttpServerService : Service() {
 
     /**
      * Safety net for Android 15+ (API 35): if the system ever sends a timeout signal
-     * (e.g. if the foregroundServiceType rules change in a future update),
-     * gracefully self-restart instead of letting the system crash the app.
+     * (e.g. for dataSync type which has a 6-hour limit), gracefully self-restart 
+     * instead of letting the system crash the app.
      */
     override fun onTimeout(startId: Int, fgsType: Int) {
         FileLogger.logWarning(applicationContext, TAG,
-            "⚠ onTimeout received (startId=$startId, fgsType=$fgsType) — performing self-restart")
+            "⚠ onTimeout received (startId=$startId, fgsType=$fgsType) — performing self-restart to reset timer")
         performSelfRestart()
     }
 
@@ -303,9 +303,9 @@ class WolHttpServerService : Service() {
             .build()
 
         // Android 14+ (API 34) requires foregroundServiceType in startForeground()
-        // Use CONNECTED_DEVICE type — no timeout limit (unlike dataSync which has 6h limit on API 35+)
+        // Use dataSync type — has a 6h limit on Android 15+ which we handle in onTimeout()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
+            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
         } else {
             startForeground(NOTIFICATION_ID, notification)
         }
